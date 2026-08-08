@@ -1,0 +1,112 @@
+{
+  "hash": "aa3d6173",
+  "configHash": "c0b98faa",
+  "lockfileHash": "f85e1d29",
+  "browserHash": "9eae85a5",
+  "optimized": {
+    "react": {
+      "src": "../../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "2a9b4c77",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "b139727d",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "1fbd3231",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "f0b6b035",
+      "needsInterop": true
+    },
+    "axios": {
+      "src": "../../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "864a5c33",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "3a92817f",
+      "needsInterop": true
+    },
+    "react-icons/ai": {
+      "src": "../../../node_modules/react-icons/ai/index.mjs",
+      "file": "react-icons_ai.js",
+      "fileHash": "06e06ae4",
+      "needsInterop": false
+    },
+    "react-icons/bs": {
+      "src": "../../../node_modules/react-icons/bs/index.mjs",
+      "file": "react-icons_bs.js",
+      "fileHash": "a162f71f",
+      "needsInterop": false
+    },
+    "react-icons/fi": {
+      "src": "../../../node_modules/react-icons/fi/index.mjs",
+      "file": "react-icons_fi.js",
+      "fileHash": "3f42795e",
+      "needsInterop": false
+    },
+    "react-icons/md": {
+      "src": "../../../node_modules/react-icons/md/index.mjs",
+      "file": "react-icons_md.js",
+      "fileHash": "f4368900",
+      "needsInterop": false
+    },
+    "react-router-dom": {
+      "src": "../../../node_modules/react-router-dom/dist/index.js",
+      "file": "react-router-dom.js",
+      "fileHash": "40074bec",
+      "needsInterop": false
+    },
+    "sonner": {
+      "src": "../../../node_modules/sonner/dist/index.mjs",
+      "file": "sonner.js",
+      "fileHash": "9b07afa3",
+      "needsInterop": false
+    },
+    "spinners-react": {
+      "src": "../../../node_modules/spinners-react/lib/esm/index.js",
+      "file": "spinners-react.js",
+      "fileHash": "a8a3df4d",
+      "needsInterop": false
+    },
+    "styled-components": {
+      "src": "../../../node_modules/styled-components/dist/styled-components.browser.esm.js",
+      "file": "styled-components.js",
+      "fileHash": "650fddb6",
+      "needsInterop": false
+    },
+    "timeago.js": {
+      "src": "../../../node_modules/timeago.js/esm/index.js",
+      "file": "timeago__js.js",
+      "fileHash": "c49c531e",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-XZZQZPUB": {
+      "file": "chunk-XZZQZPUB.js"
+    },
+    "chunk-S2OKILS3": {
+      "file": "chunk-S2OKILS3.js"
+    },
+    "chunk-ABPYCOPH": {
+      "file": "chunk-ABPYCOPH.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
+}
