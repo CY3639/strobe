@@ -29,6 +29,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+/credentials
 
 # Local app data
 uploads/
