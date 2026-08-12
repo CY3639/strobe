@@ -1,14 +1,10 @@
 # Strobe Server (Javascript)
 
-Strobe is a platform for sharing photos with family and friends. It was developed for CAB432 Cloud Computing at the Queensland University of Technology.
+Strobe is a platform for sharing photos with family and friends.
 
 With thanks to Jackson Riding for the development of Strobe Server.
 
 This is the JavaScript implementation of Strobe Server. There is also a Python implementation.
-
-Copyright (c) 2026 Queensland University of Technology
-
-This software is not open source and remains property of the Queensland University of Technology. Unauthorised distribution is not permitted.
 
 ## Local development
 

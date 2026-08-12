@@ -1,9 +1,7 @@
 
 # Strobe Web
 
-Strobe is a platform for sharing photos with family and friends. It was developed for CAB432 Cloud Computing at the Queensland University of Technology.
-
-With thanks to Jackson Riding for the development of Strobe Web.
+Strobe is a platform for sharing photos with family and friends.
 
 Strobe Web was forked from an open source repository by GitHub user yassinjouao, linked below.
 
