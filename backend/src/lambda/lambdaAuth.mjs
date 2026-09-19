@@ -11,7 +11,8 @@ import {
 
 import {
     DynamoDBDocumentClient,
-    PutCommand
+    PutCommand,
+    GetCommand
 } from "@aws-sdk/lib-dynamodb";
 
 import {
@@ -248,6 +249,11 @@ async function register(event) {
     }
 }
 
+// Read claims from a token we just received directly from Cognito
+function decodeJwtPayload(jwt) {
+    const payload = jwt.split(".")[1];
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+}
 
 
 // LOGIN
@@ -343,18 +349,45 @@ async function login(event) {
 
         // RETURN COGNITO TOKENS
 
-        return response(200, {
+        // return response(200, {
             
+        //     token: auth.AccessToken,
+
+        //     accessToken: auth.AccessToken,
+
+        //     idToken: auth.IdToken,
+
+        //     refreshToken: auth.RefreshToken,
+
+        //     expiresIn: auth.ExpiresIn,
+
+        //     tokenType: auth.TokenType
+        // });
+
+        const claims = decodeJwtPayload(auth.IdToken);
+
+        // Users table is keyed by Cognito sub (see register())
+        const userResult = await dynamodb.send(
+            new GetCommand({
+                TableName: USERS_TABLE,
+                Key: { id: claims.sub }
+            })
+        );
+
+        const user = userResult.Item ?? {
+            id: claims.sub,
+            username: claims.email,
+            email: claims.email,
+            role: "user"
+        };
+
+        return response(200, {
+            user,
             token: auth.AccessToken,
-
             accessToken: auth.AccessToken,
-
             idToken: auth.IdToken,
-
             refreshToken: auth.RefreshToken,
-
             expiresIn: auth.ExpiresIn,
-
             tokenType: auth.TokenType
         });
 
