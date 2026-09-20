@@ -11,6 +11,9 @@ import {
     DeleteCommand
 } from "@aws-sdk/lib-dynamodb";
 
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
 import crypto from "crypto";
 
 
@@ -27,8 +30,39 @@ const MOMENTS_TABLE =
 const FOLLOWS_TABLE =
     process.env.DYNAMODB_FOLLOWS_TABLE;
 
+const MEDIA_BUCKET = process.env.S3_MEDIA_BUCKET;
+const MEDIA_URL_EXPIRY_SECONDS = 300;
+const s3 = new S3Client({ region: "ap-southeast-2" });
+
 const MOMENT_DURATION_HOURS = 24;
 
+function imageReferenceToKey(ref) {
+    if (!ref || typeof ref !== "string") return null;
+    if (!/^https?:\/\//i.test(ref)) return ref.replace(/^\/+/, "");
+    try {
+        const url = new URL(ref);
+        if (!url.hostname.includes(".s3.")) return null; // not our bucket
+        return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+    } catch {
+        return null;
+    }
+}
+
+async function withSignedImage(moment) {
+    const key = imageReferenceToKey(moment.imageUrl);
+    if (!key) return moment;
+    try {
+        const imageUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: MEDIA_BUCKET, Key: key }),
+            { expiresIn: MEDIA_URL_EXPIRY_SECONDS }
+        );
+        return { ...moment, imageUrl };
+    } catch (error) {
+        console.error("Could not sign moment image:", key, error);
+        return moment;
+    }
+}
 
 // --------------------------------------------------
 // RESPONSE HELPER
@@ -532,7 +566,7 @@ async function getMomentFeed(
             }
 
 
-            moments.push(updated);
+            moments.push(await withSignedImage(updated));
         }
 
 
@@ -653,7 +687,7 @@ async function getMomentArchive(
             }
 
 
-            moments.push(updated);
+            moments.push(await withSignedImage(updated));
         }
 
 

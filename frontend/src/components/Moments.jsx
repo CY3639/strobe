@@ -195,12 +195,12 @@ function Moments() {
         const uploaded = uploadContentType.includes("application/json")
           ? await uploadRes.json().catch(() => null)
           : null;
-        uploadedPath = uploaded?.file?.url || uploaded?.url || null;
+        uploadedPath = uploadedPath = urlRes.data.key || fallbackReadUrl || uploadUrl.split("?")[0] || null;
       }
 
       if (!uploadedPath) throw new Error("Upload did not return image URL");
 
-      const finalImageUrl = resolveApiUrl(uploadedPath);
+      const finalImageUrl = urlRes.data.key ||resolveApiUrl(uploadedPath);
       if (!finalImageUrl) throw new Error("Uploaded image URL is invalid");
 
       await api.post("/v1/moments", {
