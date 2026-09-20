@@ -46,7 +46,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
 
 const CONFIG = {
   userPoolId: requireEnv("COGNITO_USER_POOL_ID"),
-  bucket: requireEnv("MEDIA_BUCKET"),
+  bucket: requireEnv("S3_MEDIA_BUCKET"),
   tables: {
     users: requireEnv("DYNAMODB_USERS_TABLE"),
     posts: requireEnv("DYNAMODB_POSTS_TABLE"),

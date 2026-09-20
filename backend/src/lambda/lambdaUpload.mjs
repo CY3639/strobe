@@ -28,7 +28,7 @@ const REGION =
     "ap-southeast-2";
 
 const MEDIA_BUCKET =
-    process.env.S3UPLOAD_BUCKET;
+    process.env.S3_MEDIA_BUCKET;
 
 const POSTS_TABLE =
     process.env.DYNAMODB_POSTS_TABLE;
