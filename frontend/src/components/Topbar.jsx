@@ -65,9 +65,11 @@ function Topbar(props) {
     if (searchquery.length < 1) { setusersSearch([]); return; }
     const timer = setTimeout(async () => {
       try {
-        const res = await api.get("/v1/users?q=" + searchquery + "&limit=8");
+        const res = await api.get("/v1/users", { params: { q: searchquery, limit: 8 } });
         setusersSearch(res.data.users || []);
-      } catch {}
+      } catch (err) {
+        console.error("User search failed", err);
+      }
     }, 500);
     return () => clearTimeout(timer);
   }, [searchquery]);
