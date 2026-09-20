@@ -161,37 +161,38 @@ function sanitizeUser(user) {
 // GET ALL USERS
 // GET /v1/users
 
-async function getUsers() {
+async function scanAllUsers() {
+    const items = [];
+    let ExclusiveStartKey;
+    do {
+        const result = await dynamodb.send(
+            new ScanCommand({ TableName: USERS_TABLE, ExclusiveStartKey })
+        );
+        items.push(...(result.Items || []));
+        ExclusiveStartKey = result.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
+    return items;
+}
+
+async function getUsers(event) {
+    const params = event.queryStringParameters || {};
+    const q = (params.q || "").trim().toLowerCase();
+    const parsed = Number.parseInt(params.limit, 10);
+    const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 20, 1), 100);
 
     try {
+        const all = await scanAllUsers();
+        const matches = q
+            ? all.filter(u => (u.username || u.email || "").toLowerCase().includes(q))
+            : all;
 
-        const result =
-            await dynamodb.send(
-                new ScanCommand({
-                    TableName: USERS_TABLE
-                })
-            );
-
-        const users =
-            (result.Items || [])
-                .map(sanitizeUser);
-
-        return response(
-            200,
-            users
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Get users error:",
-            error
-        );
-
-        return response(500, {
-            message:
-                "Internal server error"
+        return response(200, {
+            message: "Success",
+            users: matches.slice(0, limit).map(sanitizeUser)
         });
+    } catch (error) {
+        console.error("Get users error:", error);
+        return response(500, { message: "Internal server error" });
     }
 }
 
@@ -991,7 +992,7 @@ export const handler = async (event) => {
         "GET /v1/users"
     ) {
 
-        return await getUsers();
+        return await getUsers(event);
     }
 
 
