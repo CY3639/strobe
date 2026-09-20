@@ -28,7 +28,7 @@ const REGION =
     "ap-southeast-2";
 
 const MEDIA_BUCKET =
-    process.env.S3_MEDIA_BUCKET;
+    process.env.S3UPLOAD_BUCKET;
 
 const POSTS_TABLE =
     process.env.DYNAMODB_POSTS_TABLE;
@@ -209,6 +209,24 @@ async function generateUploadUrl(
         );
     }
 
+    const purpose = body.purpose === "moment" ? "moment" : "post";
+
+    if (purpose === "moment") {
+        const fileId = crypto.randomUUID();
+        const objectKey = `${user.id}/moments/${fileId}`;
+
+        const uploadUrl = await getSignedUrl(
+            s3,
+            new PutObjectCommand({
+                Bucket: MEDIA_BUCKET,
+                Key: objectKey,
+                ContentType: contentType
+            }),
+            { expiresIn: UPLOAD_URL_EXPIRY_SECONDS }
+        );
+
+        return response(200, { message: "Success", uploadUrl, fileId, key: objectKey });
+    }
 
     const postId =
         body.postId;

@@ -143,7 +143,10 @@ function Moments() {
       setIsPosting(true);
 
       const pseudoPostId = `moment-${Date.now()}`;
-      const urlRes = await api.post("/v1/uploads/url", { postId: pseudoPostId });
+      const urlRes = await api.post("/v1/uploads/url", {
+        purpose: "moment",
+        contentType: selectedFile.type || "application/octet-stream",
+      });
       const uploadUrl = resolveApiUrl(urlRes.data.uploadUrl);
       const fallbackReadUrl = resolveApiUrl(
         urlRes.data.fileUrl || urlRes.data.publicUrl || urlRes.data.url || ""
