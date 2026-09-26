@@ -108,13 +108,16 @@ export async function loadConfig() {
         heartbeatUserId:
             values["heartbeat-user-id"],
 
-        ownershipMode:
-            values["ownership-mode"],
-
-        uploadKeyRegex:
-            values["upload-key-regex"]
     };
 
+    const missing = Object.entries(cachedConfig)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+    if (missing.length > 0) {
+        cachedConfig = null;
+        throw new Error(`Missing Parameter Store values: ${missing.join(", ")}`);
+    }
 
     return cachedConfig;
 }
