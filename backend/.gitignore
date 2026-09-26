@@ -39,3 +39,5 @@ db.json
 coverage/
 .nyc_output/
 .eslintcache
+
+.aws/

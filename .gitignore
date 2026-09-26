@@ -2,3 +2,4 @@
 /submission-infra.yml
 /submission-routes.yml
 /credentials
+.aws/
