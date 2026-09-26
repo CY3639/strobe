@@ -1,0 +1,9 @@
+{
+  "name": "week-7-s3-vectors",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@aws-sdk/client-s3vectors": "^3.0.0"
+  }
+}
