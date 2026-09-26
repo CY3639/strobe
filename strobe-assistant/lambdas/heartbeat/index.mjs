@@ -1,260 +1,221 @@
 import crypto from "node:crypto";
 
 import {
-    DynamoDBClient
-} from "@aws-sdk/client-dynamodb";
-
-import {
-    DynamoDBDocumentClient,
-    PutCommand,
-    UpdateCommand
+    QueryCommand,
+    PutCommand
 } from "@aws-sdk/lib-dynamodb";
 
+import {
+    dynamodb
+} from "../../src/shared/aws.mjs";
 
-const REGION =
-    process.env.AWS_REGION ||
-    "ap-southeast-2";
+import {
+    loadConfig
+} from "../../src/shared/config.mjs";
 
-const AGENT_RUNS_TABLE =
-    process.env.AGENT_RUNS_TABLE;
-
-
-const dynamodb =
-    DynamoDBDocumentClient.from(
-        new DynamoDBClient({
-            region: REGION
-        })
-    );
+import {
+    generateText
+} from "../../src/shared/bedrock.mjs";
 
 
-export const handler = async (event) => {
+export const handler =
+async () => {
 
-    console.log(
-        "Heartbeat invoked:",
-        JSON.stringify(event, null, 2)
-    );
-
-
-    if (!AGENT_RUNS_TABLE) {
-        throw new Error(
-            "AGENT_RUNS_TABLE environment variable is required"
-        );
-    }
-
-
-    /*
-     * For the initial heartbeat implementation this can come from
-     * configuration.
-     *
-     * Later, if the heartbeat processes multiple Strobe users,
-     * the worker should enumerate those users and create a run
-     * associated with each user's Cognito sub.
-     */
-    const userId =
-        process.env.HEARTBEAT_USER_ID ||
-        "SYSTEM";
+    const config =
+        await loadConfig();
 
 
     const runId =
         crypto.randomUUID();
 
+
     const startedAt =
-        new Date().toISOString();
-
-
-    /*
-     * ---------------------------------------------------------
-     * STEP 1
-     * Persist the fact that the autonomous run has started.
-     * ---------------------------------------------------------
-     */
-
-    await dynamodb.send(
-        new PutCommand({
-            TableName: AGENT_RUNS_TABLE,
-
-            Item: {
-                runId,
-                userId,
-
-                runType: "HEARTBEAT",
-
-                trigger: "EVENTBRIDGE_SCHEDULE",
-
-                status: "STARTED",
-
-                actions: [],
-
-                startedAt,
-                createdAt: startedAt
-            },
-
-            ConditionExpression:
-                "attribute_not_exists(runId)"
-        })
-    );
+        new Date()
+            .toISOString();
 
 
     try {
 
         /*
-         * -----------------------------------------------------
-         * STEP 2
-         * Autonomous heartbeat work.
-         * -----------------------------------------------------
+         * Retrieve the latest classifications for the configured
+         * demonstration user.
          *
-         * Later this becomes something like:
+         * This requires:
          *
-         * 1. inspect recent Strobe content
-         * 2. inspect classifications
-         * 3. perform semantic retrieval
-         * 4. call Bedrock
-         * 5. generate a retrospective / useful summary
+         * userId-classifiedAt-index
          *
-         * For now we keep this deterministic while validating
-         * the AgentRun persistence path.
+         * PK: userId
+         * SK: classifiedAt
          */
+        const recent =
+            await dynamodb.send(
+                new QueryCommand({
+                    TableName:
+                        config.classificationsTable,
 
-        const actions = [
-            "heartbeat invoked by EventBridge",
-            "created AgentRun record"
-        ];
+                    IndexName:
+                        "userId-classifiedAt-index",
+
+                    KeyConditionExpression:
+                        "userId = :userId",
+
+                    ExpressionAttributeValues: {
+                        ":userId":
+                            config.heartbeatUserId
+                    },
+
+                    ScanIndexForward:
+                        false,
+
+                    Limit:
+                        10
+                })
+            );
+
+
+        const context =
+            (recent.Items ?? [])
+                .map(
+                    item =>
+                        `- ${item.classifiedAt}: ${item.caption}`
+                )
+                .join("\n");
+
+
+        const prompt = `
+You are running a scheduled Strobe Assistant retrospective.
+
+Using only the photo descriptions below, write a concise factual
+summary of the user's recent Strobe content.
+
+If there are no descriptions, state that there was no recent
+classified content.
+
+Do not invent people, places, events, dates or relationships.
+
+Photo descriptions:
+
+${context || "(none)"}
+`.trim();
 
 
         const summary =
-            "Scheduled heartbeat completed successfully.";
+            await generateText({
+                modelId:
+                    config.textModelId,
+
+                prompt,
+
+                maxTokens:
+                    180,
+
+                temperature:
+                    0.2
+            });
 
 
         const completedAt =
-            new Date().toISOString();
+            new Date()
+                .toISOString();
 
-
-        /*
-         * -----------------------------------------------------
-         * STEP 3
-         * Mark the existing run as successful.
-         * -----------------------------------------------------
-         */
 
         await dynamodb.send(
-            new UpdateCommand({
+            new PutCommand({
                 TableName:
-                    AGENT_RUNS_TABLE,
+                    config.agentRunsTable,
 
-                Key: {
-                    runId
-                },
+                Item: {
+                    runId,
 
-                UpdateExpression: `
-                    SET
-                        #status = :status,
-                        summary = :summary,
-                        actions = :actions,
-                        completedAt = :completedAt
-                `,
+                    userId:
+                        config.heartbeatUserId,
 
-                ExpressionAttributeNames: {
-                    "#status": "status"
-                },
+                    runType:
+                        "scheduled-retrospective",
 
-                ExpressionAttributeValues: {
-                    ":status": "COMPLETE",
-                    ":summary": summary,
-                    ":actions": actions,
-                    ":completedAt": completedAt
-                },
+                    startedAt,
 
-                ConditionExpression:
-                    "attribute_exists(runId)"
+                    completedAt,
+
+                    status:
+                        "COMPLETED",
+
+                    summary,
+
+                    modelId:
+                        config.textModelId
+                }
             })
         );
 
 
         console.log(
-            "Heartbeat completed:",
-            {
+            JSON.stringify({
+                event:
+                    "HEARTBEAT_COMPLETED",
+
                 runId,
-                userId,
-                summary
-            }
+
+                userId:
+                    config.heartbeatUserId,
+
+                startedAt,
+
+                completedAt
+            })
         );
 
 
         return {
-            statusCode: 200,
-
             runId,
-
-            status: "COMPLETE",
-
+            status:
+                "COMPLETED",
             summary
         };
 
-
     } catch (error) {
 
-        console.error(
-            "Heartbeat execution failed:",
-            error
+        const completedAt =
+            new Date()
+                .toISOString();
+
+
+        await dynamodb.send(
+            new PutCommand({
+                TableName:
+                    config.agentRunsTable,
+
+                Item: {
+                    runId,
+
+                    userId:
+                        config.heartbeatUserId,
+
+                    runType:
+                        "scheduled-retrospective",
+
+                    startedAt,
+
+                    completedAt,
+
+                    status:
+                        "FAILED",
+
+                    modelId:
+                        config.textModelId,
+
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : String(error)
+                }
+            })
         );
 
 
-        const completedAt =
-            new Date().toISOString();
-
-
-        /*
-         * -----------------------------------------------------
-         * STEP 4
-         * Preserve failure state.
-         * -----------------------------------------------------
-         */
-
-        try {
-
-            await dynamodb.send(
-                new UpdateCommand({
-                    TableName:
-                        AGENT_RUNS_TABLE,
-
-                    Key: {
-                        runId
-                    },
-
-                    UpdateExpression: `
-                        SET
-                            #status = :status,
-                            errorMessage = :errorMessage,
-                            completedAt = :completedAt
-                    `,
-
-                    ExpressionAttributeNames: {
-                        "#status": "status"
-                    },
-
-                    ExpressionAttributeValues: {
-                        ":status": "FAILED",
-
-                        ":errorMessage":
-                            error?.message ||
-                            String(error),
-
-                        ":completedAt":
-                            completedAt
-                    },
-
-                    ConditionExpression:
-                        "attribute_exists(runId)"
-                })
-            );
-
-        } catch (persistenceError) {
-
-            console.error(
-                "Failed to update AgentRun failure state:",
-                persistenceError
-            );
-        }
+        console.error(
+            error
+        );
 
 
         throw error;

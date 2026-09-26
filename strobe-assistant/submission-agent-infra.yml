@@ -1,0 +1,44 @@
+cloudInfrastructure:
+  - type: Bedrock model
+    arn: <model-id>
+    description: <one-line description>
+
+  - type: ECS service
+    arn: <arn>
+    description: <one-line description>
+
+  - type: Vector store
+    arn: <arn-or-other-identifier>
+    description: <one-line description>
+
+  - type: MCP server
+    arn: <arn-or-endpoint>
+    description: <one-line description>
+
+  - type: SQS queue
+    arn: <arn>
+    description: <one-line description>
+
+  - type: EventBridge rule
+    arn: <arn>
+    description: <one-line description>
+
+  - type: Secrets Manager secret
+    arn: <arn>
+    description: <one-line description>
+
+  - type: S3 bucket
+    arn: <arn>
+    description: <one-line description>
+
+  - type: DynamoDB table
+    arn: <arn>
+    description: <one-line description>
+
+  - type: Lambda function
+    arn: <arn>
+    description: <one-line description>
+
+metaData:
+  track: "A"
+  qutUsernameTag: n5528712@qut.edu.au
