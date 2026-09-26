@@ -4,15 +4,15 @@ import {
 
 import {
     s3Vectors
-} from "../src/shared/aws.mjs";
+} from "../src/aws.mjs";
 
 import {
     embedText
-} from "../src/shared/bedrock.mjs";
+} from "../src/bedrock.mjs";
 
 import {
     searchUserMedia
-} from "../src/shared/vectors.mjs";
+} from "../src/vectors.mjs";
 
 
 const [

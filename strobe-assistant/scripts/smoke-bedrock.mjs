@@ -1,7 +1,7 @@
 import {
     generateText,
     embedText
-} from "../src/shared/bedrock.mjs";
+} from "../src/bedrock.mjs";
 
 
 const [
