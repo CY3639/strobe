@@ -1,6 +1,6 @@
 import {
     searchUserMedia
-} from "../src/vectors.mjs";
+} from "../src/shared/vectors.mjs";
 
 
 const [
