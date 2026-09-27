@@ -15,7 +15,6 @@ import { searchUserMedia } from "../../../src/shared/vectors.mjs";
 export class ToolError extends Error {}
 
 // Measured in Phase 4: correct scene-style matches were 0.14-0.47.
-const WEAK_MATCH_DISTANCE = 0.5;
 const URL_LIFETIME_SECONDS = 300;
 
 
@@ -63,18 +62,13 @@ export async function searchUserMediaTool({ authenticatedUserId, query, topK = 5
             caption: match.metadata.caption,
             postTitle: post.title ?? null,
             distance: Number(match.distance.toFixed(3)),
-            weakMatch: match.distance > WEAK_MATCH_DISTANCE
         }));
-
-    const allWeak = results.length > 0 && results.every(r => r.weakMatch);
 
     return {
         query: query.trim(),
         count: results.length,
         results,
-        ...(allWeak && {
-            note: "Every match is weak. Tell the user these may not be what they asked for."
-        })
+        note: "Results are ranked by similarity, but the top result is not always relevant. Judge each one by its caption."
     };
 }
 

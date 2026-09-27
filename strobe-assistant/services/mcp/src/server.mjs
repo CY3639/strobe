@@ -80,8 +80,7 @@ function buildServer({ authInfo }) {
                 "Write the query as a short description of what the photo would show, " +
                 "for example 'Fireworks exploding in the night sky over a city' or " +
                 "'A cat's face up close'. Do not start with 'a photo of' and do not " +
-                "send single keywords. Results marked weakMatch may not be relevant: " +
-                "say so rather than presenting them as matches.",
+                "send single keywords. Results are ranked by similarity only; read each caption to judge whether it matches",
             inputSchema: z.object({
                 query: z.string().min(3).max(300)
                     .describe("A short scene description of the photos wanted."),
