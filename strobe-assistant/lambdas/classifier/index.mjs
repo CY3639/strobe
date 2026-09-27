@@ -1,366 +1,206 @@
-import {
-    GetCommand,
-    PutCommand
-} from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
-import {
-    dynamodb
-} from "../../src/shared/aws.mjs";
-
-import {
-    loadConfig
-} from "../../src/shared/config.mjs";
-
-import {
-    getS3ObjectBytes,
-    imageFormatFromContentType
-} from "../../src/shared/s3.mjs";
-
-import {
-    classifyImage
-} from "../../src/shared/bedrock.mjs";
-
-import {
-    putCaptionVector
-} from "../../src/shared/vectors.mjs";
-
-import {
-    resolveImageOwnership
-} from "./ownership.mjs";
+import { dynamodb } from "../../src/shared/aws.mjs";
+import { loadConfig } from "../../src/shared/config.mjs";
+import { getS3ObjectBytes, detectImageFormat } from "../../src/shared/s3.mjs";
+import { classifyImage } from "../../src/shared/bedrock.mjs";
+import { putImageVector } from "../../src/shared/vectors.mjs";
+import { PermanentError } from "../../src/shared/errors.mjs";
 
 
-function parseSqsEventBridgeMessage(
-    record
-) {
+// Bedrock's per-image limit (believed ~3.75 MB). Verify with a large photo.
+const MAX_IMAGE_BYTES = 3_750_000;
 
-    const event =
-        JSON.parse(
-            record.body
-        );
+const log = (event, fields = {}) =>
+    console.log(JSON.stringify({ event, ...fields }));
 
-
-    const bucket =
-        event.detail
-            ?.bucket
-            ?.name;
+const stripQuotes = value => value?.replaceAll('"', "") ?? null;
 
 
-    const rawKey =
-        event.detail
-            ?.object
-            ?.key;
+/*
+ * The SQS body is the EventBridge "Object Created" event.
+ * The backfill script (Phase 4) sends the same shape.
+ */
+function parseMessage(record) {
+    const body = JSON.parse(record.body);
+    const bucket = body.detail?.bucket?.name;
+    const key = body.detail?.object?.key;
 
-
-    const etag =
-        event.detail
-            ?.object
-            ?.etag
-        ??
-        null;
-
-
-    if (
-        !bucket
-        ||
-        !rawKey
-    ) {
-
-        throw new Error(
-            `Unexpected S3 EventBridge message: ${record.body}`
-        );
+    if (!bucket || !key) {
+        throw new PermanentError(`Unexpected message shape: ${record.body.slice(0, 200)}`);
     }
 
-
-    const key =
-        decodeURIComponent(
-            rawKey.replace(/\+/g, " ")
-        );
-
-
-    return {
-        bucket,
-        key,
-        etag
-    };
+    return { bucket, key, etag: stripQuotes(body.detail?.object?.etag) };
 }
 
 
-async function alreadyProcessed({
-    tableName,
-    imageKey,
-    sourceETag
-}) {
+/*
+ * lambdaUpload mints every key, after checking ownership:
+ *   posts:   <userId>/<postId>/<fileId>
+ *   moments: <userId>/moments/<fileId>
+ * So the key itself tells us the owner. No lookup needed.
+ */
+function parseKey(key) {
+    const parts = key.split("/");
 
-    const result =
-        await dynamodb.send(
-            new GetCommand({
-                TableName:
-                    tableName,
+    if (parts.length !== 3 || parts.some(part => !part)) {
+        return { kind: "unrecognised" };
+    }
 
-                Key: {
-                    imageKey
-                }
-            })
-        );
-
-
-    return (
-        result.Item
-        &&
-        result.Item.status === "COMPLETED"
-        &&
-        result.Item.sourceETag === sourceETag
-    );
+    const [userId, second] = parts;
+    return second === "moments"
+        ? { kind: "moment" }
+        : { kind: "post", userId, postId: second };
 }
 
 
-async function processRecord({
-    record,
-    config
-}) {
+async function alreadyComplete({ table, imageKey, etag }) {
+    if (!etag) return false;
 
-    const {
-        bucket,
-        key,
-        etag
-    } =
-        parseSqsEventBridgeMessage(
-            record
-        );
+    const { Item } = await dynamodb.send(new GetCommand({
+        TableName: table,
+        Key: { imageKey }
+    }));
+
+    return Item?.status === "COMPLETE" && Item.sourceETag === etag;
+}
 
 
-    console.log(
-        JSON.stringify({
-            event:
-                "CLASSIFICATION_STARTED",
+async function processRecord(record, config) {
+    const { bucket, key, etag: eventEtag } = parseMessage(record);
+    const owner = parseKey(key);
 
-            bucket,
-            key,
-            etag
-        })
-    );
-
-
-    /*
-     * At-least-once delivery means this message may arrive again.
-     *
-     * Avoid paying Bedrock again if this exact S3 version was
-     * already successfully processed.
-     */
-    if (
-        await alreadyProcessed({
-            tableName:
-                config.classificationsTable,
-
-            imageKey:
-                key,
-
-            sourceETag:
-                etag
-        })
-    ) {
-
-        console.log(
-            JSON.stringify({
-                event:
-                    "CLASSIFICATION_ALREADY_COMPLETED",
-
-                key,
-                etag
-            })
-        );
-
-
+    if (owner.kind !== "post") {
+        log("CLASSIFICATION_SKIPPED", { key, reason: owner.kind });
         return;
     }
 
+    const { userId, postId } = owner;
+    log("CLASSIFICATION_STARTED", { key, userId, postId });
 
-    const {
+    // At-least-once delivery: don't pay Bedrock twice for the same file version.
+    if (await alreadyComplete({ table: config.classificationsTable, imageKey: key, etag: eventEtag })) {
+        log("CLASSIFICATION_ALREADY_COMPLETED", { key, etag: eventEtag });
+        return;
+    }
+
+    // Read (never write) the A1 post: it must exist and match the key's owner.
+    const { Item: post } = await dynamodb.send(new GetCommand({
+        TableName: config.postsTable,
+        Key: { id: postId }
+    }));
+
+    if (!post) {
+        log("CLASSIFICATION_SKIPPED", { key, reason: "post-not-found" });
+        return;
+    }
+    if (post.userId !== userId) {
+        log("CLASSIFICATION_SKIPPED", { key, reason: "owner-mismatch" });
+        return;
+    }
+
+    const { bytes, etag: s3Etag } = await getS3ObjectBytes({ bucket, key });
+
+    if (bytes.length > MAX_IMAGE_BYTES) {
+        throw new PermanentError(`Image is ${bytes.length} bytes; the vision model limit is ${MAX_IMAGE_BYTES}.`);
+    }
+
+    const imageFormat = detectImageFormat(bytes);
+    const sourceETag = eventEtag ?? stripQuotes(s3Etag);
+
+    const { caption, labels } = await classifyImage({
+        modelId: config.visionModelId,
+        imageBytes: bytes,
+        imageFormat
+    });
+
+    const classifiedAt = new Date().toISOString();
+
+    // 1. Vector FIRST.
+    const vectorKey = await putImageVector({
+        embeddingModelId: config.embeddingModelId,
+        vectorBucket: config.vectorBucket,
+        vectorIndex: config.vectorIndex,
         userId,
-        postId
-    } =
-        await resolveImageOwnership({
-            imageKey:
-                key,
+        postId,
+        imageKey: key,
+        caption,
+        title: post.title,
+        description: post.description,
+        classifiedAt
+    });
 
-            config
-        });
-
-
-    const {
-        bytes,
-        contentType
-    } =
-        await getS3ObjectBytes({
-            bucket,
-            key
-        });
-
-
-    const imageFormat =
-        imageFormatFromContentType(
-            contentType
-        );
-
-
-    const classification =
-        await classifyImage({
-            modelId:
-                config.visionModelId,
-
-            imageBytes:
-                bytes,
-
-            imageFormat
-        });
-
-
-    const classifiedAt =
-        new Date()
-            .toISOString();
-
-
-    /*
-     * Derived AI state.
-     *
-     * A failed AI call never invalidates the original A1 Post.
-     */
-    await dynamodb.send(
-        new PutCommand({
-            TableName:
-                config.classificationsTable,
-
-            Item: {
-                imageKey:
-                    key,
-
-                userId,
-                postId,
-
-                caption:
-                    classification.caption,
-
-                labels:
-                    classification.labels,
-
-                classifiedAt,
-
-                sourceETag:
-                    etag,
-
-                sourceBucket:
-                    bucket,
-
-                modelId:
-                    config.visionModelId,
-
-                status:
-                    "COMPLETED"
-            }
-        })
-    );
-
-
-    const vectorKey =
-        await putCaptionVector({
-            embeddingModelId:
-                config.embeddingModelId,
-
-            vectorBucket:
-                config.vectorBucket,
-
-            vectorIndex:
-                config.vectorIndex,
-
+    // 2. Row LAST: "COMPLETE" is the commit marker for the whole job.
+    await dynamodb.send(new PutCommand({
+        TableName: config.classificationsTable,
+        Item: {
+            imageKey: key,
             userId,
             postId,
-
-            imageKey:
-                key,
-
-            caption:
-                classification.caption,
-
-            classifiedAt
-        });
-
-
-    console.log(
-        JSON.stringify({
-            event:
-                "CLASSIFICATION_COMPLETED",
-
-            userId,
-            postId,
-
-            imageKey:
-                key,
-
+            caption,
+            labels,
+            classifiedAt,
+            sourceETag,
+            sourceBucket: bucket,
+            imageFormat,
+            modelId: config.visionModelId,
+            embeddingModelId: config.embeddingModelId,
             vectorKey,
+            status: "COMPLETE"
+        }
+    }));
 
-            classifiedAt
-        })
-    );
+    log("CLASSIFICATION_COMPLETED", { key, userId, postId, vectorKey, labels });
 }
 
 
-export const handler =
-async event => {
+async function recordPermanentFailure(record, config, error) {
+    let key = "unknown";
+    try { key = parseMessage(record).key; } catch { /* unparseable */ }
 
-    const config =
-        await loadConfig();
+    const owner = parseKey(key);
+    if (owner.kind !== "post") return;
+
+    await dynamodb.send(new PutCommand({
+        TableName: config.classificationsTable,
+        Item: {
+            imageKey: key,
+            userId: owner.userId,
+            postId: owner.postId,
+            status: "FAILED",
+            error: error.message,
+            classifiedAt: new Date().toISOString()
+        }
+    }));
+}
 
 
-    /*
-     * Lambda partial-batch response format.
-     *
-     * One broken image should not force successfully processed
-     * messages in the batch to be retried.
-     */
-    const batchItemFailures =
-        [];
+export const handler = async (event) => {
+    const config = await loadConfig();
+    const batchItemFailures = [];
 
-
-    for (
-        const record
-        of
-        event.Records ?? []
-    ) {
-
+    for (const record of event.Records ?? []) {
         try {
-
-            await processRecord({
-                record,
-                config
-            });
+            await processRecord(record, config);
 
         } catch (error) {
 
-            console.error(
-                JSON.stringify({
-                    event:
-                        "CLASSIFICATION_FAILED",
+            if (error instanceof PermanentError) {
+                // Retrying can't fix this: record it and let SQS delete the message.
+                log("CLASSIFICATION_FAILED_PERMANENTLY", { messageId: record.messageId, error: error.message });
+                await recordPermanentFailure(record, config, error).catch(e => console.error(e));
+                continue;
+            }
 
-                    messageId:
-                        record.messageId,
-
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : String(error)
-                })
-            );
-
-
-            batchItemFailures.push({
-                itemIdentifier:
-                    record.messageId
+            // Possibly temporary (throttling, network): hand back to SQS to retry.
+            log("CLASSIFICATION_FAILED", {
+                messageId: record.messageId,
+                attempt: record.attributes?.ApproximateReceiveCount,
+                error: error.message
             });
+            batchItemFailures.push({ itemIdentifier: record.messageId });
         }
     }
 
-
-    return {
-        batchItemFailures
-    };
+    return { batchItemFailures };
 };

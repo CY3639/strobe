@@ -6,6 +6,10 @@ import {
     s3
 } from "./aws.mjs";
 
+import { 
+    PermanentError 
+} from "./errors.mjs";
+
 
 export async function getS3ObjectBytes({
     bucket,
@@ -51,33 +55,19 @@ export async function getS3ObjectBytes({
 }
 
 
-export function imageFormatFromContentType(
-    contentType
-) {
+/*
+ * Trust the file's bytes, not its Content-Type header.
+ * Strobe uploads are signed as application/octet-stream,
+ * so the header usually says nothing useful.
+ */
+export function detectImageFormat(bytes) {
+    const ascii = (start, end) =>
+        String.fromCharCode(...bytes.slice(start, end));
 
-    switch (
-        contentType
-            .split(";")[0]
-            .trim()
-            .toLowerCase()
-    ) {
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return "jpeg";
+    if (bytes[0] === 0x89 && ascii(1, 4) === "PNG") return "png";
+    if (ascii(0, 4) === "GIF8") return "gif";
+    if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "webp";
 
-        case "image/png":
-            return "png";
-
-        case "image/gif":
-            return "gif";
-
-        case "image/webp":
-            return "webp";
-
-        case "image/jpeg":
-        case "image/jpg":
-            return "jpeg";
-
-        default:
-            throw new Error(
-                `Unsupported image Content-Type: ${contentType}`
-            );
-    }
+    throw new PermanentError("File is not a JPEG, PNG, GIF or WebP image.");
 }

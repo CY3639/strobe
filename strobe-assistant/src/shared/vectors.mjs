@@ -12,7 +12,7 @@ import {
 } from "./bedrock.mjs";
 
 
-export async function putCaptionVector({
+export async function putImageVector({
     embeddingModelId,
     vectorBucket,
     vectorIndex,
@@ -20,63 +20,37 @@ export async function putCaptionVector({
     postId,
     imageKey,
     caption,
+    title,
+    description,
     classifiedAt
 }) {
+    // Embed what the photo shows AND what the user called it.
+    const text = [caption, title, description]
+        .map(part => (part ?? "").trim())
+        .filter(Boolean)
+        .join(". ");
 
-    const embedding =
-        await embedText({
-            modelId:
-                embeddingModelId,
+    const embedding = await embedText({ modelId: embeddingModelId, text });
 
-            text:
-                caption
-        });
+    // Stable key: reprocessing overwrites instead of duplicating.
+    const vectorKey = `${imageKey}#caption`;
 
+    const metadata = {
+        userId,
+        postId,
+        imageKey,
+        caption,
+        kind: "image-caption",
+        classifiedAt
+    };
+    if (title) metadata.title = title;
+    if (description) metadata.description = description;
 
-    /*
-     * Stable key:
-     *
-     * Reprocessing the same image overwrites the same logical
-     * vector instead of producing a duplicate.
-     */
-    const vectorKey =
-        `${imageKey}#caption`;
-
-
-    await s3Vectors.send(
-        new PutVectorsCommand({
-            vectorBucketName:
-                vectorBucket,
-
-            indexName:
-                vectorIndex,
-
-            vectors: [
-                {
-                    key:
-                        vectorKey,
-
-                    data: {
-                        float32:
-                            embedding
-                    },
-
-                    metadata: {
-                        userId,
-                        postId,
-                        imageKey,
-                        caption,
-
-                        kind:
-                            "image-caption",
-
-                        classifiedAt
-                    }
-                }
-            ]
-        })
-    );
-
+    await s3Vectors.send(new PutVectorsCommand({
+        vectorBucketName: vectorBucket,
+        indexName: vectorIndex,
+        vectors: [{ key: vectorKey, data: { float32: embedding }, metadata }]
+    }));
 
     return vectorKey;
 }
