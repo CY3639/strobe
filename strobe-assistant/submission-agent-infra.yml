@@ -4,11 +4,11 @@ cloudInfrastructure:
     description: <one-line description>
 
   - type: ECS service
-    arn: <arn>
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:service/n5528712-a2-cluster/n5528712-a2-mcp-service
     description: <one-line description>
 
   - type: Vector store
-    arn: <arn-or-other-identifier>
+    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors/index/strobe-media
     description: <one-line description>
 
   - type: MCP server
@@ -16,11 +16,15 @@ cloudInfrastructure:
     description: <one-line description>
 
   - type: SQS queue
-    arn: <arn>
+    arn: arn:aws:sqs:ap-southeast-2:901444280953:n5528712-a2-classification
+    description: <one-line description>
+
+  - type: DLQ
+    arn: arn:aws:sqs:ap-southeast-2:901444280953:n5528712-a2-classification-dlq
     description: <one-line description>
 
   - type: EventBridge rule
-    arn: <arn>
+    arn: arn:aws:events:ap-southeast-2:901444280953:rule/n5528712-a2-image-uploaded
     description: <one-line description>
 
   - type: Secrets Manager secret
@@ -28,15 +32,23 @@ cloudInfrastructure:
     description: <one-line description>
 
   - type: S3 bucket
-    arn: <arn>
+    arn: arn:aws:s3:::n5528712-a1-s3uploads
     description: <one-line description>
 
-  - type: DynamoDB table
-    arn: <arn>
+  - type: DynamoDB agents run table
+    arn: arn:aws:dynamodb:ap-southeast-2:901444280953:table/n5528712-a2-agent-runs
     description: <one-line description>
 
-  - type: Lambda function
-    arn: <arn>
+  - type: DynamoDB classification table
+    arn: arn:aws:dynamodb:ap-southeast-2:901444280953:table/n5528712-a2-classifications
+    description: <one-line description>
+
+  - type: Lambda heartbeat function
+    arn: arn:aws:lambda:ap-southeast-2:901444280953:function:n5528712-a2-lambdaHeartbeat
+    description: <one-line description>
+
+  - type: Lambda classifier function
+    arn: arn:aws:lambda:ap-southeast-2:901444280953:function:n5528712-a2-lambdaClassifier
     description: <one-line description>
 
 metaData:
