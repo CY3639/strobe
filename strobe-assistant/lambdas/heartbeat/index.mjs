@@ -19,7 +19,7 @@ const RUN_TYPE = "HEARTBEAT";
  * Anything else (console tests, scripts) is recorded as MANUAL.
  */
 function triggerFrom(event) {
-    return event?.trigger === "schedule"
+    return event?.trigger === "scheduled"
         ? "EVENTBRIDGE_SCHEDULE"
         : "MANUAL";
 }

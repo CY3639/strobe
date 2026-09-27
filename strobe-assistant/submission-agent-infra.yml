@@ -20,7 +20,7 @@ cloudInfrastructure:
     description: Separately deployed MCP server exposing search_user_media, get_post and get_image_url tools that enforce per-user ownership.
 
   - type: ECS task definition
-    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-mcp:4
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-mcp:5
     description: Defines the MCP server container, its task role, port and CloudWatch logging.
 
   - type: ECR repository

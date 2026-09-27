@@ -8,7 +8,7 @@ import { fileToImagePart, type ImagePart } from "./image";
 // STUDENT CONFIGURATION: set this to the ACP agent's WebSocket endpoint.
 // Use wss:// when the web client is served over HTTPS.
 // -----------------------------------------------------------------------------
-const ACP_WEBSOCKET_ENDPOINT = "ws://127.0.0.1:7331/acp";
+const ACP_WEBSOCKET_ENDPOINT = "wss://n5528712.cab432.com/acp";
 
 const STROBE_API_BASE = "https://rw6ev7gjr3.execute-api.ap-southeast-2.amazonaws.com";
 
