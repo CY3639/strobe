@@ -196,7 +196,9 @@ export const handler = async (event) => {
             log("CLASSIFICATION_FAILED", {
                 messageId: record.messageId,
                 attempt: record.attributes?.ApproximateReceiveCount,
-                error: error.message
+                error: error.message,
+                errorName: error.name,
+                httpStatus: error.$metadata?.httpStatusCode
             });
             batchItemFailures.push({ itemIdentifier: record.messageId });
         }
