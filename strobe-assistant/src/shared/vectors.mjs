@@ -130,7 +130,7 @@ export async function searchUserMedia({
                  * filter them in JavaScript afterward.
                  */
                 filter: {
-                    userId
+                    userId: { $eq: userId }
                 },
 
                 returnDistance:
