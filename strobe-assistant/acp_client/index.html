@@ -21,6 +21,15 @@
         </div>
       </header>
 
+      <form id="login-form" class="composer">
+        <input id="login-email" type="email" placeholder="Strobe email" autocomplete="username" required />
+        <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" required />
+        <div class="composer-footer">
+          <span id="login-error" class="hint"></span>
+          <button id="login-submit" type="submit">Sign in to Strobe</button>
+        </div>
+      </form>
+
       <section id="messages" class="messages" aria-live="polite" aria-label="Conversation">
         <div class="empty-state">
           <strong>Connected.</strong>

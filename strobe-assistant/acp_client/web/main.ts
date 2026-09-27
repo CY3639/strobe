@@ -10,6 +10,16 @@ import { fileToImagePart, type ImagePart } from "./image";
 // -----------------------------------------------------------------------------
 const ACP_WEBSOCKET_ENDPOINT = "ws://127.0.0.1:7331/acp";
 
+const STROBE_API_BASE = "https://rw6ev7gjr3.execute-api.ap-southeast-2.amazonaws.com";
+
+// Kept in memory only (not localStorage): a page script can't find it later.
+let accessToken: string | null = null;
+
+const loginForm = getElement<HTMLFormElement>("login-form");
+const loginEmail = getElement<HTMLInputElement>("login-email");
+const loginPassword = getElement<HTMLInputElement>("login-password");
+const loginError = getElement<HTMLElement>("login-error");
+
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   parts: acp.ContentBlock[];
@@ -260,7 +270,8 @@ async function connect(): Promise<void> {
     const session = await nextConnection.agent.request(acp.methods.agent.session.new, {
       cwd: "/",
       mcpServers: [],
-    });
+      _meta: { strobeAccessToken: accessToken },
+    } as acp.NewSessionRequest);
     sessionId = session.sessionId;
     setBusy(false);
     setStatus("Ready", "ready");
@@ -368,4 +379,32 @@ promptInput.addEventListener("keydown", (event) => {
 window.addEventListener("beforeunload", disconnect);
 
 applyTheme();
-void connect().catch(reportConnectionError);
+setStatus("Sign in to start", "idle");
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginError.textContent = "";
+
+  try {
+    const response = await fetch(`${STROBE_API_BASE}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: loginEmail.value, password: loginPassword.value }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.accessToken) {
+      loginError.textContent = data.message ?? "Sign-in failed.";
+      return;
+    }
+
+    accessToken = data.accessToken;
+    loginPassword.value = "";          // don't keep the password around
+    loginForm.hidden = true;
+  } catch (error) {
+    loginError.textContent = `Sign-in failed: ${errorMessage(error)}`;
+    return;
+  }
+
+  // Signed in: now open the ACP connection, as the original last line did.
+  await connect().catch(reportConnectionError);
+});
