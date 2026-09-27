@@ -15,10 +15,27 @@ import {
     getImageUrlTool
 } from "./tool-core.mjs";
 
+import { timingSafeEqual } from "node:crypto";
+import { loadConfig } from "../../../src/shared/config.mjs";
+import { getServiceKey } from "../../../src/shared/secrets.mjs";
+
 
 const HOST = process.env.HOST ?? "127.0.0.1";
 const PORT = Number(process.env.PORT ?? 8000);
 const DEV_USER_ID = process.env.DEV_STROBE_USER_ID;
+
+const config = await loadConfig();
+const SERVICE_KEY = await getServiceKey(config.serviceKeySecretName);
+
+// Constant-time comparison: response timing can't reveal how much matched.
+function hasServiceKey(req) {
+    const presented = req.headers["x-strobe-service-key"];
+    if (typeof presented !== "string") return false;
+
+    const a = Buffer.from(presented);
+    const b = Buffer.from(SERVICE_KEY);
+    return a.length === b.length && timingSafeEqual(a, b);
+}
 
 const log = (event, fields = {}) =>
     console.log(JSON.stringify({ event, ...fields }));
@@ -148,6 +165,13 @@ const httpServer = createServer((req, res) => {
     }
 
     if (localOnly && (!validateHost(req, res) || !validateOrigin(req, res))) {
+        return;
+    }
+
+    if (!hasServiceKey(req)) {
+        log("MCP_REQUEST_REJECTED", { reason: "missing-or-wrong-service-key" });
+        res.writeHead(401, { "content-type": "application/json" })
+           .end(JSON.stringify({ error: "unauthenticated" }));
         return;
     }
 

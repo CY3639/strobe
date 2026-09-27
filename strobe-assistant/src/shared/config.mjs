@@ -108,6 +108,9 @@ export async function loadConfig() {
         heartbeatUserId:
             values["heartbeat-user-id"],
 
+        serviceKeySecretName:
+            values["service-key-secret-name"],
+
     };
 
     const missing = Object.entries(cachedConfig)

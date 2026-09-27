@@ -15,6 +15,7 @@ import { z } from "zod";
 import { loadConfig } from "../../../src/shared/config.mjs";
 import { classifyImage } from "../../../src/shared/bedrock.mjs";
 import { detectImageFormat } from "../../../src/shared/s3.mjs";
+import { getServiceKey } from "../../../src/shared/secrets.mjs";
 
 
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -29,6 +30,8 @@ const log = (event, fields = {}) =>
     console.log(JSON.stringify({ event, ...fields }));
 
 const config = await loadConfig();
+
+const SERVICE_KEY = await getServiceKey(config.serviceKeySecretName);
 
 const bedrock = createAmazonBedrock({
     region: REGION,
@@ -68,7 +71,10 @@ You are Strobe Assistant, a helper for one Strobe user's own photo library.
  */
 async function connectMcp(authToken) {
     const client = new McpClient({ name: "strobe-agent", version: "1.0.0" });
-    const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+    const headers = {
+        "X-Strobe-Service-Key": SERVICE_KEY,
+        ...(authToken && { Authorization: `Bearer ${authToken}` })
+    };
 
     await client.connect(new StreamableHTTPClientTransport(
         new URL(MCP_URL),
