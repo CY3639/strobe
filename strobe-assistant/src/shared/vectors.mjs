@@ -11,6 +11,18 @@ import {
     embedText
 } from "./bedrock.mjs";
 
+/*
+ * Remove Gemma's template opener so the vector represents the
+ * subject, not the word "photo". Measured: the opener made
+ * one caption the top match for unrelated queries.
+ */
+export function normaliseCaption(caption = "") {
+    return caption
+        .trim()
+        .replace(/^(the|this)\s+(photo|image|picture)\s+(shows|depicts|features)\s+/i, "")
+        .replace(/^a close-up of\s+/i, "")
+        .replace(/^./, first => first.toUpperCase());
+}
 
 export async function putImageVector({
     embeddingModelId,
@@ -27,7 +39,7 @@ export async function putImageVector({
 }) {
     // Model-written text only. Measured: user titles confused Titan
     // (e.g. "meow" moved a kitten photo AWAY from "cats").
-    const text = [caption, labels.join(", ")]
+    const text = [normaliseCaption(caption), labels.join(", ")]
         .map(part => (part ?? "").trim())
         .filter(Boolean)
         .join(". ");

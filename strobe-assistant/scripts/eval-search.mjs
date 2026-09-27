@@ -6,13 +6,21 @@ const userId = process.argv[2] ?? config.heartbeatUserId;
 
 // A small labelled set: query → which captions count as correct.
 const CASES = [
+    // Bare keywords (users type these)
     { query: "cats", expect: /cat|kitten/i },
     { query: "fireworks", expect: /firework/i },
     { query: "people in the water", expect: /people/i },
     { query: "something at the beach", expect: /people/i },
+
+    // "A photo of ..." style
     { query: "A photo of a cat", expect: /cat|kitten/i },
     { query: "A photo of fireworks exploding at night", expect: /firework/i },
-    { query: "A photo of people walking in shallow ocean water", expect: /people/i }
+    { query: "A photo of people walking in shallow ocean water", expect: /people/i },
+
+    // Scene style: what the agent will be told to write
+    { query: "A cat's face up close", expect: /cat|kitten/i },
+    { query: "Fireworks exploding in the night sky over a city", expect: /firework/i },
+    { query: "People walking through shallow turquoise ocean water", expect: /people/i }
 ];
 
 const rows = [];
