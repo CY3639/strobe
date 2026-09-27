@@ -11,18 +11,6 @@ cloudInfrastructure:
     arn: amazon.titan-embed-image-v1
     description: Produces the 256-dimension embeddings used to index captions and search queries in S3 Vectors.
 
-  - type: ECS service
-    arn: arn:aws:ecs:ap-southeast-2:901444280953:service/n5528712-a2-cluster/n5528712-a2-mcp-service
-    description: <one-line description>
-
-  - type: S3 Vectors vector bucket
-    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors
-    description: Holds the vector index used for nearest-neighbour search over each user's photos.
-
-  - type: S3 Vectors index
-    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors/index/strobe-media
-    description: Stores one caption-plus-labels embedding per photo, filtered by userId so each search only sees its owner's photos.
-
   - type: ECS cluster
     arn: arn:aws:ecs:ap-southeast-2:901444280953:cluster/n5528712-a2-cluster
     description: Fargate cluster that runs the Strobe Assistant container services.
@@ -32,12 +20,21 @@ cloudInfrastructure:
     description: Separately deployed MCP server exposing search_user_media, get_post and get_image_url tools that enforce per-user ownership.
 
   - type: ECS task definition
-    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-mcp:3
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-mcp:4
     description: Defines the MCP server container, its task role, port and CloudWatch logging.
 
   - type: ECR repository
     arn: arn:aws:ecr:ap-southeast-2:901444280953:repository/a2/n5528712-mcp
     description: Stores the versioned MCP server container images deployed to ECS.
+
+  - type: S3 Vectors vector bucket
+    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors
+    description: Holds the vector index used for nearest-neighbour search over each user's photos.
+
+  - type: S3 Vectors index
+    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors/index/strobe-media
+    description: Stores one caption-plus-labels embedding per photo, filtered by userId so each search only sees its owner's photos.
+
 
   - type: CloudWatch log group
     arn: arn:aws:logs:ap-southeast-2:901444280953:log-group:/ecs/n5528712-a2-mcp
