@@ -1,55 +1,99 @@
 cloudInfrastructure:
-  - type: Bedrock model
-    arn: <model-id>
-    description: <one-line description>
+  - type: Bedrock nvidia nemotron model
+    arn: nvidia.nemotron-super-3-120b
+    description: Powers the conversational Strobe agent and writes the scheduled heartbeat retrospectives
+
+  - type: Bedrock google gemma model
+    arn: google.gemma-3-12b-it
+    description: Generates captions and labels for newly uploaded Strobe photos and for photos attached in chat.
+
+  - type: Bedrock amazon titan model
+    arn: amazon.titan-embed-image-v1
+    description: Produces the 256-dimension embeddings used to index captions and search queries in S3 Vectors.
 
   - type: ECS service
     arn: arn:aws:ecs:ap-southeast-2:901444280953:service/n5528712-a2-cluster/n5528712-a2-mcp-service
     description: <one-line description>
 
-  - type: Vector store
-    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors/index/strobe-media
-    description: <one-line description>
+  - type: S3 Vectors vector bucket
+    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors
+    description: Holds the vector index used for nearest-neighbour search over each user's photos.
 
-  - type: MCP server
-    arn: <arn-or-endpoint>
-    description: <one-line description>
+  - type: S3 Vectors index
+    arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors/index/strobe-media
+    description: Stores one caption-plus-labels embedding per photo, filtered by userId so each search only sees its owner's photos.
+
+  - type: ECS cluster
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:cluster/n5528712-a2-cluster
+    description: Fargate cluster that runs the Strobe Assistant container services.
+
+  - type: ECS service MCP server
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:service/n5528712-a2-cluster/n5528712-a2-mcp-service
+    description: Separately deployed MCP server exposing search_user_media, get_post and get_image_url tools that enforce per-user ownership.
+
+  - type: ECS task definition
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-mcp:3
+    description: Defines the MCP server container, its task role, port and CloudWatch logging.
+
+  - type: ECR repository
+    arn: arn:aws:ecr:ap-southeast-2:901444280953:repository/a2/n5528712-mcp
+    description: Stores the versioned MCP server container images deployed to ECS.
+
+  - type: CloudWatch log group
+    arn: arn:aws:logs:ap-southeast-2:901444280953:log-group:/ecs/n5528712-a2-mcp
+    description: Collects the MCP server's structured logs, including every tool call and rejected request.
 
   - type: SQS queue
     arn: arn:aws:sqs:ap-southeast-2:901444280953:n5528712-a2-classification
-    description: <one-line description>
+    description: Durably buffers image classification jobs so uploads never wait for AI processing.
 
-  - type: DLQ
+  - type: SQS queue - DLQ
     arn: arn:aws:sqs:ap-southeast-2:901444280953:n5528712-a2-classification-dlq
-    description: <one-line description>
+    description: Dead-letter queue that keeps classification jobs which failed three times for inspection and redrive.
 
   - type: EventBridge rule
     arn: arn:aws:events:ap-southeast-2:901444280953:rule/n5528712-a2-image-uploaded
-    description: <one-line description>
+    description: Routes S3 Object Created events from the Strobe uploads bucket to the classification queue.
+
+  - type: EventBridge Scheduler schedule
+    arn: arn:aws:scheduler:ap-southeast-2:901444280953:schedule/default/n5528712-a2-heartbeat
+    description: Invokes the heartbeat agent on a schedule with no human prompt.
 
   - type: Secrets Manager secret
-    arn: <arn>
-    description: <one-line description>
+    arn: arn:aws:secretsmanager:ap-southeast-2:901444280953:secret:n5528712-a2-mcp-service-key-A645nc
+    description: Shared service key the Strobe agent presents to the MCP server, so only the agent (not any logged-in user or the public internet) can call its tools.
 
   - type: S3 bucket
     arn: arn:aws:s3:::n5528712-a1-s3uploads
-    description: <one-line description>
+    description: Reused private Strobe photo bucket whose upload events start classification and whose photos the MCP server signs links for.
 
-  - type: DynamoDB agents run table
+  - type: DynamoDB agents runs table
     arn: arn:aws:dynamodb:ap-southeast-2:901444280953:table/n5528712-a2-agent-runs
-    description: <one-line description>
+    description: Agent run memory recording what each heartbeat did, when, and its summary, so each run builds on the last.
 
-  - type: DynamoDB classification table
+  - type: DynamoDB classifications table
     arn: arn:aws:dynamodb:ap-southeast-2:901444280953:table/n5528712-a2-classifications
-    description: <one-line description>
+    description: Stores each photo's AI caption, labels and timestamp, linked back to its post by postId and imageKey.
+
+  - type: DynamoDB posts table
+    arn: arn:aws:dynamodb:ap-southeast-2:901444280953:table/n5528712-a1-posts
+    description: Reused Assessment 1 posts table that the MCP server and classifier read (never write) for titles and ownership.
+
+  - type: DynamoDB table
+    arn: arn:aws:dynamodb:ap-southeast-2:901444280953:table/n5528712-a1-users
+    description: Reused Assessment 1 users table whose ids match the Cognito identity used throughout the assistant.
 
   - type: Lambda heartbeat function
     arn: arn:aws:lambda:ap-southeast-2:901444280953:function:n5528712-a2-lambdaHeartbeat
-    description: <one-line description>
+    description: Reads the previous run and new classifications, writes a Bedrock retrospective, and records the run.
 
   - type: Lambda classifier function
     arn: arn:aws:lambda:ap-southeast-2:901444280953:function:n5528712-a2-lambdaClassifier
-    description: <one-line description>
+    description: Consumes queued upload events, captions each photo with Gemma, and stores the classification and its vector.
+
+  - type: SSM Parameter Store parameters
+    arn: arn:aws:ssm:ap-southeast-2:901444280953:parameter/n5528712/a2/*
+    description: Holds model IDs, table names and resource names so no configuration is hard-coded in the services.
 
 metaData:
   track: "A"
