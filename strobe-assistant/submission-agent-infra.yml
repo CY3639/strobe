@@ -19,9 +19,17 @@ cloudInfrastructure:
     arn: arn:aws:ecs:ap-southeast-2:901444280953:service/n5528712-a2-cluster/n5528712-a2-mcp-service
     description: Separately deployed MCP server exposing search_user_media, get_post and get_image_url tools that enforce per-user ownership.
 
-  - type: ECS task definition
+  - type: ECS mcp task definition
     arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-mcp:5
     description: Defines the MCP server container, its task role, port and CloudWatch logging.
+
+  - type: ECS agent task definition
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-agent:2
+    description: Defines the agent container (image v2, with inline photos and narrated albums), its task role, the MCP_URL setting and CloudWatch logging.
+
+  - type: ECS webui task definition
+    arn: arn:aws:ecs:ap-southeast-2:901444280953:task-definition/n5528712-a2-webui:2
+    description: Defines the WebUI container (image v3, with Strobe sign-in and automatic ws/wss endpoint selection) and its CloudWatch logging.
 
   - type: ECR repository
     arn: arn:aws:ecr:ap-southeast-2:901444280953:repository/a2/n5528712-mcp
