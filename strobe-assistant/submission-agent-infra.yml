@@ -27,6 +27,14 @@ cloudInfrastructure:
     arn: arn:aws:ecr:ap-southeast-2:901444280953:repository/a2/n5528712-mcp
     description: Stores the versioned MCP server container images deployed to ECS.
 
+  - type: ECR repository
+    arn: arn:aws:ecr:ap-southeast-2:901444280953:repository/a2/n5528712-agent
+    description: Stores the versioned container images for the ACP agent service.
+
+  - type: ECR repository
+    arn: arn:aws:ecr:ap-southeast-2:901444280953:repository/a2/n5528712-webui
+    description: Stores the versioned container images for the ACP WebUI chat client, built to connect over wss://.
+
   - type: S3 Vectors vector bucket
     arn: arn:aws:s3vectors:ap-southeast-2:901444280953:bucket/n5528712-a2-vectors
     description: Holds the vector index used for nearest-neighbour search over each user's photos.
