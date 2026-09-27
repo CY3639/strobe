@@ -36,10 +36,6 @@ cloudInfrastructure:
     description: Stores one caption-plus-labels embedding per photo, filtered by userId so each search only sees its owner's photos.
 
 
-  - type: CloudWatch log group
-    arn: arn:aws:logs:ap-southeast-2:901444280953:log-group:/ecs/n5528712-a2-mcp
-    description: Collects the MCP server's structured logs, including every tool call and rejected request.
-
   - type: SQS queue
     arn: arn:aws:sqs:ap-southeast-2:901444280953:n5528712-a2-classification
     description: Durably buffers image classification jobs so uploads never wait for AI processing.
@@ -88,9 +84,6 @@ cloudInfrastructure:
     arn: arn:aws:lambda:ap-southeast-2:901444280953:function:n5528712-a2-lambdaClassifier
     description: Consumes queued upload events, captions each photo with Gemma, and stores the classification and its vector.
 
-  - type: SSM Parameter Store parameters
-    arn: arn:aws:ssm:ap-southeast-2:901444280953:parameter/n5528712/a2/*
-    description: Holds model IDs, table names and resource names so no configuration is hard-coded in the services.
 
 metaData:
   track: "A"
