@@ -1,245 +1,114 @@
-import {
-    GetCommand
-} from "@aws-sdk/lib-dynamodb";
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import {
-    GetObjectCommand
-} from "@aws-sdk/client-s3";
-
-import {
-    getSignedUrl
-} from "@aws-sdk/s3-request-presigner";
-
-import {
-    dynamodb,
-    s3
-} from "../../../src/shared/aws.mjs";
-
-import {
-    loadConfig
-} from "../../../src/shared/config.mjs";
-
-import {
-    searchUserMedia
-} from "../../../src/shared/vectors.mjs";
+import { dynamodb, s3 } from "../../../src/shared/aws.mjs";
+import { loadConfig } from "../../../src/shared/config.mjs";
+import { searchUserMedia } from "../../../src/shared/vectors.mjs";
 
 
-export async function searchUserMediaTool({
-    authenticatedUserId,
-    query,
-    topK = 5
-}) {
+/*
+ * Errors that are safe to show the model. Anything else is
+ * logged in full but reported as a generic failure, so AWS
+ * internals never leak into a chat.
+ */
+export class ToolError extends Error {}
 
-    if (!authenticatedUserId) {
+// Measured in Phase 4: correct scene-style matches were 0.14-0.47.
+const WEAK_MATCH_DISTANCE = 0.5;
+const URL_LIFETIME_SECONDS = 300;
 
-        throw new Error(
-            "Authenticated user ID is required."
-        );
+
+/*
+ * One rule for every post lookup: missing and not-yours give the
+ * SAME answer, so the tool can't be used to discover whether
+ * another user's post ID exists.
+ */
+async function getOwnedPost(config, postId, userId) {
+    const { Item: post } = await dynamodb.send(new GetCommand({
+        TableName: config.postsTable,
+        Key: { id: postId }
+    }));
+
+    if (!post || post.userId !== userId) {
+        throw new ToolError("Post not found.");
     }
+    return post;
+}
 
 
-    if (
-        typeof query !== "string"
-        ||
-        query.trim().length === 0
-    ) {
+export async function searchUserMediaTool({ authenticatedUserId, query, topK = 5 }) {
+    const config = await loadConfig();
 
-        throw new Error(
-            "query must be a non-empty string."
-        );
-    }
+    const matches = await searchUserMedia({
+        embeddingModelId: config.embeddingModelId,
+        vectorBucket: config.vectorBucket,
+        vectorIndex: config.vectorIndex,
+        userId: authenticatedUserId,     // the isolation boundary
+        query: query.trim(),
+        topK
+    });
 
+    // A1 deletes posts without deleting their vectors: drop orphans.
+    const posts = await Promise.all(matches.map(match =>
+        getOwnedPost(config, match.metadata.postId, authenticatedUserId).catch(() => null)
+    ));
 
-    const config =
-        await loadConfig();
+    const results = matches
+        .map((match, i) => ({ match, post: posts[i] }))
+        .filter(({ post }) => post)
+        .map(({ match, post }) => ({
+            postId: post.id,
+            imageKey: match.metadata.imageKey,
+            caption: match.metadata.caption,
+            postTitle: post.title ?? null,
+            distance: Number(match.distance.toFixed(3)),
+            weakMatch: match.distance > WEAK_MATCH_DISTANCE
+        }));
 
-
-    const matches =
-        await searchUserMedia({
-            embeddingModelId:
-                config.embeddingModelId,
-
-            vectorBucket:
-                config.vectorBucket,
-
-            vectorIndex:
-                config.vectorIndex,
-
-            userId:
-                authenticatedUserId,
-
-            query:
-                query.trim(),
-
-            topK
-        });
-
+    const allWeak = results.length > 0 && results.every(r => r.weakMatch);
 
     return {
-        query:
-            query.trim(),
-
-        count:
-            matches.length,
-
-        matches
+        query: query.trim(),
+        count: results.length,
+        results,
+        ...(allWeak && {
+            note: "Every match is weak. Tell the user these may not be what they asked for."
+        })
     };
 }
 
 
-export async function getPostTool({
-    authenticatedUserId,
-    postId
-}) {
-
-    const config =
-        await loadConfig();
-
-
-    const response =
-        await dynamodb.send(
-            new GetCommand({
-                TableName:
-                    config.postsTable,
-
-                Key: {
-                    id:
-                        postId
-                }
-            })
-        );
-
-
-    const post =
-        response.Item;
-
-
-    if (!post) {
-
-        throw new Error(
-            "Post not found."
-        );
-    }
-
-
-    if (
-        post.userId
-        !==
-        authenticatedUserId
-    ) {
-
-        throw new Error(
-            "Forbidden."
-        );
-    }
-
+export async function getPostTool({ authenticatedUserId, postId }) {
+    const config = await loadConfig();
+    const post = await getOwnedPost(config, postId, authenticatedUserId);
 
     return {
-        id:
-            post.id,
-
-        userId:
-            post.userId,
-
-        title:
-            post.title,
-
-        description:
-            post.description,
-
-        images:
-            post.images,
-
-        createdAt:
-            post.createdAt,
-
-        updatedAt:
-            post.updatedAt,
-
-        status:
-            post.status
+        postId: post.id,
+        title: post.title ?? "",
+        description: post.description ?? "",
+        imageKeys: post.images ?? [],
+        createdAt: post.createdAt,
+        status: post.status
     };
 }
 
 
-export async function getImageUrlTool({
-    authenticatedUserId,
-    imageKey
-}) {
+export async function getImageUrlTool({ authenticatedUserId, imageKey }) {
+    const config = await loadConfig();
 
-    const config =
-        await loadConfig();
-
-
-    /*
-     * Classification table doubles as the stable mapping between
-     * a searchable image and its owner.
-     */
-    const response =
-        await dynamodb.send(
-            new GetCommand({
-                TableName:
-                    config.classificationsTable,
-
-                Key: {
-                    imageKey
-                }
-            })
-        );
-
-
-    const classification =
-        response.Item;
-
-
-    if (!classification) {
-
-        throw new Error(
-            "Image classification not found."
-        );
+    // lambdaUpload mints every key as <ownerId>/<postId>/<fileId>,
+    // so the first segment IS the owner.
+    const parts = imageKey.split("/");
+    if (parts.length !== 3 || parts[0] !== authenticatedUserId) {
+        throw new ToolError("Image not found.");
     }
 
+    const url = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: config.uploadsBucket, Key: imageKey }),
+        { expiresIn: URL_LIFETIME_SECONDS }
+    );
 
-    if (
-        classification.userId
-        !==
-        authenticatedUserId
-    ) {
-
-        throw new Error(
-            "Forbidden."
-        );
-    }
-
-
-    const expiresIn =
-        300;
-
-
-    const url =
-        await getSignedUrl(
-            s3,
-
-            new GetObjectCommand({
-                Bucket:
-                    config.uploadsBucket,
-
-                Key:
-                    imageKey
-            }),
-
-            {
-                expiresIn
-            }
-        );
-
-
-    return {
-        imageKey,
-
-        url,
-
-        expiresInSeconds:
-            expiresIn
-    };
+    return { imageKey, url, expiresInSeconds: URL_LIFETIME_SECONDS };
 }
