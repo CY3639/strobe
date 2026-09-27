@@ -11,6 +11,7 @@ import { ToolLoopAgent, stepCountIs, tool } from "ai";
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
+import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { loadConfig } from "../../../src/shared/config.mjs";
 import { classifyImage } from "../../../src/shared/bedrock.mjs";
@@ -32,6 +33,12 @@ const log = (event, fields = {}) =>
 const config = await loadConfig();
 
 const SERVICE_KEY = await getServiceKey(config.serviceKeySecretName);
+
+const verifier = CognitoJwtVerifier.create({
+    userPoolId: config.cognitoUserPoolId,
+    clientId: config.cognitoClientId,
+    tokenUse: "access"
+});
 
 const bedrock = createAmazonBedrock({
     region: REGION,
@@ -178,19 +185,49 @@ const acpAgent = acp
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: { loadSession: false }
     }))
-    .onRequest(acp.methods.agent.session.new, async () => {
+    .onRequest(acp.methods.agent.session.new, async (context) => {
+        // Proves whether _meta reaches us through the ACP SDK (keep for now).
+        log("ACP_SESSION_REQUEST", { paramKeys: Object.keys(context.params ?? {}) });
+
+        const token = context.params?._meta?.strobeAccessToken;
+        if (!token) throw new Error("Please sign in first.");
+
+        let claims;
+        try {
+            claims = await verifier.verify(token);
+        } catch (error) {
+            log("ACP_SESSION_REJECTED", { reason: error.name });
+            throw new Error("Your sign-in is invalid or has expired. Please sign in again.");
+        }
+
         const sessionId = crypto.randomUUID();
-        const session = { id: sessionId, messages: [], mcp: await connectMcp(null) };
+        const session = {
+            id: sessionId,
+            userId: claims.sub,
+            tokenExpiresAt: claims.exp,
+            messages: [],
+            mcp: await connectMcp(token)
+        };
         session.agent = makeAgent(session);
         sessions.set(sessionId, session);
 
-        log("ACP_SESSION_CREATED", { sessionId });
+        log("ACP_SESSION_CREATED", { sessionId, userId: claims.sub });
         return { sessionId };
     })
     .onRequest(acp.methods.agent.session.prompt, async (context) => {
         const { sessionId, prompt } = context.params;
         const session = sessions.get(sessionId);
         if (!session) throw new Error(`Unknown session: ${sessionId}`);
+        if (Date.now() / 1000 > session.tokenExpiresAt - 30) {
+            await context.client.notify(acp.methods.client.session.update, {
+                sessionId,
+                update: {
+                    sessionUpdate: "agent_message_chunk",
+                    content: { type: "text", text: "Your sign-in has expired. Please refresh the page and sign in again." }
+                }
+            });
+            return { stopReason: "end_turn" };
+        }
 
         const started = Date.now();
         let text = prompt.filter(p => p.type === "text").map(p => p.text).join("\n").trim();

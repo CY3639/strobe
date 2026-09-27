@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
 
+import { CognitoJwtVerifier } from "aws-jwt-verify";
+
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import {
     toNodeHandler,
@@ -20,12 +22,20 @@ import { loadConfig } from "../../../src/shared/config.mjs";
 import { getServiceKey } from "../../../src/shared/secrets.mjs";
 
 
+
 const HOST = process.env.HOST ?? "127.0.0.1";
 const PORT = Number(process.env.PORT ?? 8000);
 const DEV_USER_ID = process.env.DEV_STROBE_USER_ID;
 
 const config = await loadConfig();
 const SERVICE_KEY = await getServiceKey(config.serviceKeySecretName);
+
+// Checks signature (against Cognito's public keys), expiry, token type and app client.
+const verifier = CognitoJwtVerifier.create({
+    userPoolId: config.cognitoUserPoolId,
+    clientId: config.cognitoClientId,
+    tokenUse: "access"
+});
 
 // Constant-time comparison: response timing can't reveal how much matched.
 function hasServiceKey(req) {
@@ -42,19 +52,35 @@ const log = (event, fields = {}) =>
 
 
 /*
- * WHO IS CALLING? Phase 5: a fixed development user.
- * Phase 8 replaces this one function with Cognito JWT verification.
- * Returns null when the caller cannot be identified.
+ * WHO IS CALLING? A verified Cognito access token.
+ * The dev user only works on a localhost bind (never in ECS,
+ * where HOST=0.0.0.0), so it can't leak into the deployment.
  */
-function resolveAuth(req) {
-    if (!DEV_USER_ID) return null;
+async function resolveAuth(req) {
+    const header = req.headers.authorization ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
-    return {
-        token: "dev",
-        clientId: "dev",
-        scopes: [],
-        extra: { userId: DEV_USER_ID }
-    };
+    if (token) {
+        try {
+            const claims = await verifier.verify(token);
+            return {
+                token,
+                clientId: claims.client_id,
+                scopes: (claims.scope ?? "").split(" "),
+                expiresAt: claims.exp,
+                extra: { userId: claims.sub }
+            };
+        } catch (error) {
+            log("MCP_TOKEN_REJECTED", { reason: error.name });
+            return null;
+        }
+    }
+
+    if (DEV_USER_ID && HOST === "127.0.0.1") {
+        return { token: "dev", clientId: "dev", scopes: [], extra: { userId: DEV_USER_ID } };
+    }
+
+    return null;
 }
 
 
@@ -151,7 +177,7 @@ const validateHost = localhostHostValidation();
 const validateOrigin = localhostOriginValidation();
 
 
-const httpServer = createServer((req, res) => {
+const httpServer = createServer(async (req, res) => {
     const path = new URL(req.url, "http://localhost").pathname;
 
     if (req.method === "GET" && path === "/healthz") {
@@ -175,7 +201,7 @@ const httpServer = createServer((req, res) => {
         return;
     }
 
-    const authInfo = resolveAuth(req);
+    const authInfo = await resolveAuth(req);
     if (!authInfo) {
         log("MCP_REQUEST_REJECTED", { reason: "unauthenticated" });
         res.writeHead(401, {
