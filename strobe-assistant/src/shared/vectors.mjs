@@ -20,15 +20,23 @@ export async function putImageVector({
     postId,
     imageKey,
     caption,
+    labels = [],
     title,
     description,
     classifiedAt
 }) {
-    // Embed what the photo shows AND what the user called it.
-    const text = [caption, title, description]
+    // Model-written text only. Measured: user titles confused Titan
+    // (e.g. "meow" moved a kitten photo AWAY from "cats").
+    const text = [caption, labels.join(", ")]
         .map(part => (part ?? "").trim())
         .filter(Boolean)
         .join(". ");
+    
+    // Embed what the photo shows AND what the user called it.
+    // const text = [caption, title, description]
+    //     .map(part => (part ?? "").trim())
+    //     .filter(Boolean)
+    //     .join(". ");
 
     const embedding = await embedText({ modelId: embeddingModelId, text });
 

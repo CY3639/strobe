@@ -125,6 +125,7 @@ async function processRecord(record, config) {
         postId,
         imageKey: key,
         caption,
+        labels,
         title: post.title,
         description: post.description,
         classifiedAt
