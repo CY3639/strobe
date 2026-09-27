@@ -1,8 +1,10 @@
-node_modules
-npm-debug.log
+**/node_modules
+dist
 .git
-.gitignore
 .env
-.env.*
-docs
-provided
+.env*
+prac_archives
+acp_client
+experiments
+scripts
+lambdas
